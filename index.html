@@ -31,84 +31,102 @@
       <a-entity mindar-image-target="targetIndex: 0">
         <a-entity id="anchor" position="0 0 0" rotation="0 0 0"></a-entity>
       </a-entity>
-      <a-plane id="video-plane" src="#video" position="0 0 0" height="1128" width="2042" rotation="0 0 0"></a-plane>
+      <a-plane id="video-plane" src="#video" position="0 0 0" rotation="0 0 0"></a-plane>
     </a-scene>
     <script>
-      let anchorEl = document.querySelector('#anchor');
-      let trackedObjectEl = document.querySelector("#video-plane");
-      let anchor = anchorEl.object3D;      
-      let trackedObject = trackedObjectEl.object3D;
-      let anchorPosition = new THREE.Vector3();
-      let anchorRotation = new THREE.Quaternion();
-      let isFocus = false;
-      let speedMoveToAnchor = 1;
-      let epsilonToAnchor = 1;
+      /*** === Constants === ***/
+      const anchorEl = document.querySelector('#anchor');
+      const trackedObjectEl = document.querySelector("#video-plane");
+      const video = document.querySelector("#video");
+      const soundButton = document.querySelector("#soundButton");
+      const target = document.querySelector("[mindar-image-target]");
+      
+      const anchor = anchorEl.object3D;
+      const trackedObject = trackedObjectEl.object3D;
+      const anchorPosition = new THREE.Vector3();
+      const anchorRotation = new THREE.Quaternion();
+      
+      const STOP_DISTANCE = 1;
+      const INITIAL_MOVE_SPEED = 1;
+      const FINAL_MOVE_SPEED = 0.1;
 
-      document.addEventListener("DOMContentLoaded", function () {
-        const video = document.querySelector("#video");
-        const target = document.querySelector("[mindar-image-target]");
+      const VIDEO_SIZE = { width: 2042, height: 1128 };
+      const VIDEO_PLAY_DELAY = 500;
+      const VIDEO_VOLUME = 0.01;
 
-        function tryPlayVideo() {
-          video.play().then(() => {
-            console.log("Video on play");
-          }).catch((e) => console.error("Ошибка воспроизведения:", e));
-        }
+      /*** === Variables === ***/
+      let speedMovementToAnchor = INITIAL_MOVE_SPEED;
+      let isTracking = false;
 
-        target.addEventListener("targetFound", () => {
-          setTimeout(tryPlayVideo, 500);
-          isFocus = true;
-        });
-
-        target.addEventListener("targetLost", () => {
-          console.log("Video on pause");
-          video.pause();
-          speedMoveToAnchor = 1;
-          isFocus = false;
-          if (trackedObject) {
-            trackedObject.visible = false;
-          }
-        });
-
-        soundButton.addEventListener("click", () => {
-          video.muted = false;
-          soundButton.volume = 0.2;
-          tryPlayVideo();
-          soundButton.style.display = "none";
-        });
+      /*** === Init=== ***/
+      document.addEventListener("DOMContentLoaded", () => {
+        video.load();
+        trackedObjectEl.setAttribute("width", VIDEO_SIZE.width);
+        trackedObjectEl.setAttribute("height", VIDEO_SIZE.height);
       });
 
-      function animate() {
-        requestAnimationFrame(animate);
-        if(isFocus == false) return;
-        if (trackedObject) {
+      /*** === Functions === ***/
+      function playVideo() {
+          video.play()
+              .then(() => console.log("Video started"))
+              .catch(err => console.error("Playback error:", err));
+      }
+
+      function pauseVideo() {
+          video.pause();
+          console.log("Video paused");
+      }
+
+      function enableSound() {
+          video.muted = false;
+          video.volume = VIDEO_VOLUME;
+          soundButton.style.display = "none";
+      }
+
+      function updateObjectTransform() {
+          if (!isTracking) return;
           
           anchor.updateMatrixWorld();
           anchor.getWorldPosition(anchorPosition);
-
-          let distance = trackedObject.position.distanceTo(anchorPosition);
-          console.log("Distance ", distance);
-
-          if (distance > epsilonToAnchor) {
-              trackedObject.position.lerp(anchorPosition, speedMoveToAnchor);
+          
+          const distance = trackedObject.position.distanceTo(anchorPosition);
+          
+          if (distance > STOP_DISTANCE) {
+              trackedObject.position.lerp(anchorPosition, speedMovementToAnchor);
           } else {
               trackedObject.position.copy(anchorPosition);
           }
-
-          if(isNaN(anchorRotation.x) || isNaN(anchorRotation.y) || isNaN(anchorRotation.z) || isNaN(anchorRotation.w)) {
-            let temp = new THREE.Quaternion(); 
-            anchor.getWorldQuaternion(temp);
-            anchorRotation.copy(temp);
-            trackedObject.quaternion.copy(anchorRotation);
-          }          
+          
           anchor.getWorldQuaternion(anchorRotation);
-          trackedObject.quaternion.slerp(anchorRotation, speedMoveToAnchor);
+          trackedObject.quaternion.slerp(anchorRotation, speedMovementToAnchor);
 
-          if (distance <= epsilonToAnchor && trackedObject.visible == false) {
+          if (distance <= STOP_DISTANCE && !trackedObject.visible) {
               trackedObject.visible = true;
-              speedMoveToAnchor = 0.1;
+              speedMovementToAnchor = FINAL_MOVE_SPEED;
           }
-        }
       }
+
+      function animate() {
+        requestAnimationFrame(animate);
+        updateObjectTransform();
+      }
+
+      /*** === Event listeners === ***/
+      target.addEventListener("targetFound", () => {
+        isTracking = true;
+        setTimeout(playVideo, VIDEO_PLAY_DELAY);
+      });
+
+      target.addEventListener("targetLost", () => {
+        isTracking = false;
+        pauseVideo();
+        speedMovementToAnchor = INITIAL_MOVE_SPEED;
+        trackedObject.visible = false;
+      });
+
+      soundButton.addEventListener("click", enableSound);
+
+      // Start loop
       animate();
     </script>
   </body>
